@@ -1,0 +1,44 @@
+// This is your Prisma schema file for the Chenchugudi Festival Platform
+// Learn more: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+
+// Gallery photos/videos uploaded by admin
+model GalleryImage {
+  id          Int      @id @default(autoincrement())
+  title       String
+  imageUrl    String
+  publicId    String?  // Cloudinary asset ID for deletion
+  uploadedBy  String
+  mediaType   String   @default("image") // "image" or "video"
+  eventDate   DateTime @default(now())
+  eventName   String?  // e.g. "Day 1" or "Stage Drama"
+  createdAt   DateTime @default(now())
+}
+
+// Festival announcements/news
+model Announcement {
+  id        Int      @id @default(autoincrement())
+  title     String
+  body      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
+
+// Push subscriptions for live notifications
+model PushSubscription {
+  id        Int      @id @default(autoincrement())
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+}
+
