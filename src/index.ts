@@ -605,25 +605,46 @@ app.post('/api/admin/seed', async (req, res) => {
 });
 
 // ── POST /api/admin/migrate ─────────────────────────────────────────
-// ONE-TIME endpoint to run prisma migrate deploy on production DB.
+// ONE-TIME endpoint to create all tables directly via SQL in production.
 app.post('/api/admin/migrate', async (req, res) => {
   const { secret } = req.body;
   if (secret !== 'seed-chenchugudi-2026') {
     return res.status(401).json({ error: 'Unauthorized' });
   }
   try {
-    console.log('🔧 Running prisma migrate deploy...');
-    const output = execSync('./node_modules/.bin/prisma migrate deploy', {
-      env: { ...process.env },
-      encoding: 'utf8',
-      timeout: 60000,
-      cwd: process.cwd(),
-    });
-    console.log('✅ Migration output:', output);
-    res.json({ success: true, message: '✅ Migrations deployed!', output });
+    console.log('🔧 Creating production database tables...');
+
+    await prisma.$executeRawUnsafe(`CREATE TABLE IF NOT EXISTS "GalleryImage" ("id" SERIAL NOT NULL, "title" TEXT NOT NULL, "titleTe" TEXT, "imageUrl" TEXT NOT NULL, "mediaType" TEXT NOT NULL DEFAULT 'IMAGE', "videoUrl" TEXT, "publicId" TEXT, "uploadedBy" TEXT NOT NULL, "eventDate" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "eventName" TEXT, "eventNameTe" TEXT, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, CONSTRAINT "GalleryImage_pkey" PRIMARY KEY ("id"))`);
+
+    await prisma.$executeRawUnsafe(`CREATE TABLE IF NOT EXISTS "Announcement" ("id" SERIAL NOT NULL, "title" TEXT NOT NULL, "titleTe" TEXT, "body" TEXT NOT NULL, "bodyTe" TEXT, "isActive" BOOLEAN NOT NULL DEFAULT true, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, CONSTRAINT "Announcement_pkey" PRIMARY KEY ("id"))`);
+
+    await prisma.$executeRawUnsafe(`CREATE TABLE IF NOT EXISTS "PushSubscription" ("id" SERIAL NOT NULL, "endpoint" TEXT NOT NULL, "p256dh" TEXT NOT NULL, "auth" TEXT NOT NULL, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, CONSTRAINT "PushSubscription_pkey" PRIMARY KEY ("id"))`);
+    await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "PushSubscription_endpoint_key" ON "PushSubscription"("endpoint")`);
+
+    await prisma.$executeRawUnsafe(`CREATE TABLE IF NOT EXISTS "UserVisit" ("id" SERIAL NOT NULL, "ipAddress" TEXT NOT NULL, "visitDate" TEXT NOT NULL, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, CONSTRAINT "UserVisit_pkey" PRIMARY KEY ("id"))`);
+    await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "UserVisit_ipAddress_visitDate_key" ON "UserVisit"("ipAddress", "visitDate")`);
+
+    await prisma.$executeRawUnsafe(`CREATE TABLE IF NOT EXISTS "Feedback" ("id" SERIAL NOT NULL, "isLike" BOOLEAN NOT NULL, "ipAddress" TEXT NOT NULL, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, CONSTRAINT "Feedback_pkey" PRIMARY KEY ("id"))`);
+    await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "Feedback_ipAddress_key" ON "Feedback"("ipAddress")`);
+
+    await prisma.$executeRawUnsafe(`CREATE TABLE IF NOT EXISTS "SiteSetting" ("id" INTEGER NOT NULL DEFAULT 1, "liveStreamUrl" TEXT, "liveStreamPlatform" TEXT NOT NULL DEFAULT 'youtube', "isLiveActive" BOOLEAN NOT NULL DEFAULT false, "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, CONSTRAINT "SiteSetting_pkey" PRIMARY KEY ("id"))`);
+
+    await prisma.$executeRawUnsafe(`CREATE TABLE IF NOT EXISTS "FestivalYear" ("id" SERIAL NOT NULL, "year" TEXT NOT NULL, "pamphletUrl" TEXT, "isActive" BOOLEAN NOT NULL DEFAULT false, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, CONSTRAINT "FestivalYear_pkey" PRIMARY KEY ("id"))`);
+    await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "FestivalYear_year_key" ON "FestivalYear"("year")`);
+
+    await prisma.$executeRawUnsafe(`CREATE TABLE IF NOT EXISTS "EventSchedule" ("id" SERIAL NOT NULL, "yearId" INTEGER NOT NULL, "date" TEXT NOT NULL, "dayTe" TEXT NOT NULL, "dayEn" TEXT NOT NULL, "eventTe" TEXT NOT NULL, "eventEn" TEXT NOT NULL, "sponsorTe" TEXT, "sponsorEn" TEXT, "icon" TEXT, "highlight" BOOLEAN NOT NULL DEFAULT false, "fee" TEXT, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, CONSTRAINT "EventSchedule_pkey" PRIMARY KEY ("id"))`);
+
+    await prisma.$executeRawUnsafe(`CREATE TABLE IF NOT EXISTS "DailySponsor" ("id" SERIAL NOT NULL, "yearId" INTEGER NOT NULL, "date" TEXT NOT NULL, "dayTe" TEXT NOT NULL, "dayEn" TEXT NOT NULL, "nameTe" TEXT NOT NULL, "nameEn" TEXT NOT NULL, "locationTe" TEXT, "locationEn" TEXT, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, CONSTRAINT "DailySponsor_pkey" PRIMARY KEY ("id"))`);
+
+    // Add foreign keys if they don't exist
+    await prisma.$executeRawUnsafe(`DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'EventSchedule_yearId_fkey') THEN ALTER TABLE "EventSchedule" ADD CONSTRAINT "EventSchedule_yearId_fkey" FOREIGN KEY ("yearId") REFERENCES "FestivalYear"("id"); END IF; END $$`);
+    await prisma.$executeRawUnsafe(`DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'DailySponsor_yearId_fkey') THEN ALTER TABLE "DailySponsor" ADD CONSTRAINT "DailySponsor_yearId_fkey" FOREIGN KEY ("yearId") REFERENCES "FestivalYear"("id"); END IF; END $$`);
+
+    console.log('✅ All tables created successfully!');
+    res.json({ success: true, message: '✅ All database tables created successfully!' });
   } catch (error: any) {
     console.error('Migration error:', error.message);
-    res.status(500).json({ error: error.message, stderr: error.stderr });
+    res.status(500).json({ error: error.message });
   }
 });
 
