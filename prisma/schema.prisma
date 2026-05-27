@@ -73,3 +73,47 @@ model SiteSetting {
   isLiveActive       Boolean  @default(false)
   updatedAt          DateTime @updatedAt
 }
+
+// Festival Year Configuration
+model FestivalYear {
+  id          Int      @id @default(autoincrement())
+  year        String   @unique // e.g. "2026"
+  pamphletUrl String?  // URL or path to the pamphlet PDF
+  isActive    Boolean  @default(false)
+  events      EventSchedule[]
+  sponsors    DailySponsor[]
+  createdAt   DateTime @default(now())
+}
+
+// Main Event Schedule
+model EventSchedule {
+  id          Int      @id @default(autoincrement())
+  yearId      Int
+  year        FestivalYear @relation(fields: [yearId], references: [id])
+  date        String
+  dayTe       String
+  dayEn       String
+  eventTe     String
+  eventEn     String
+  sponsorTe   String?
+  sponsorEn   String?
+  icon        String?
+  highlight   Boolean  @default(false)
+  fee         String?
+  createdAt   DateTime @default(now())
+}
+
+// Daily Pooja Sponsors
+model DailySponsor {
+  id          Int      @id @default(autoincrement())
+  yearId      Int
+  year        FestivalYear @relation(fields: [yearId], references: [id])
+  date        String
+  dayTe       String
+  dayEn       String
+  nameTe      String
+  nameEn      String
+  locationTe  String?
+  locationEn  String?
+  createdAt   DateTime @default(now())
+}

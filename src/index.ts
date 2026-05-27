@@ -40,6 +40,32 @@ app.use((req, res, next) => {
 
 // API Endpoints
 
+// ── GET /api/festival/active ─────────────────────────────────────────
+app.get('/api/festival/active', async (req, res) => {
+  try {
+    const activeYear = await prisma.festivalYear.findFirst({
+      where: { isActive: true },
+      include: {
+        events: {
+          orderBy: { id: 'asc' },
+        },
+        sponsors: {
+          orderBy: { date: 'asc' },
+        },
+      },
+    });
+
+    if (!activeYear) {
+      return res.status(404).json({ error: 'No active festival year found' });
+    }
+
+    res.json(activeYear);
+  } catch (error) {
+    console.error('Error fetching active festival year:', error);
+    res.status(500).json({ error: 'Failed to fetch active festival year' });
+  }
+});
+
 // ── GET /api/stats ────────────────────────────────────────────────────
 app.get('/api/stats', async (req, res) => {
   try {
