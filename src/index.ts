@@ -60,6 +60,18 @@ app.get('/api/festival/active', async (req, res) => {
       return res.status(404).json({ error: 'No active festival year found' });
     }
 
+    // Helper to parse 'DD-M-YYYY' into a comparable timestamp
+    const parseDate = (d: string) => {
+      const parts = d.split('-');
+      if (parts.length === 3) {
+        return new Date(`${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`).getTime();
+      }
+      return 0;
+    };
+
+    activeYear.events.sort((a, b) => parseDate(a.date) - parseDate(b.date));
+    activeYear.sponsors.sort((a, b) => parseDate(a.date) - parseDate(b.date));
+
     res.json(activeYear);
   } catch (error) {
     console.error('Error fetching active festival year:', error);
