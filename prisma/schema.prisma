@@ -10,17 +10,17 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-
 // Gallery photos/videos uploaded by admin
 model GalleryImage {
   id          Int      @id @default(autoincrement())
   title       String
-  imageUrl    String
+  imageUrl    String   // stores Cloudinary URL (image or video thumbnail)
+  mediaType   String   @default("IMAGE") // IMAGE, VIDEO, YOUTUBE
+  videoUrl    String?  // Original video URL or YouTube URL
   publicId    String?  // Cloudinary asset ID for deletion
   uploadedBy  String
-  mediaType   String   @default("image") // "image" or "video"
   eventDate   DateTime @default(now())
-  eventName   String?  // e.g. "Day 1" or "Stage Drama"
+  eventName   String?
   createdAt   DateTime @default(now())
 }
 
@@ -42,3 +42,30 @@ model PushSubscription {
   createdAt DateTime @default(now())
 }
 
+// Track unique page views on a daily basis by IP
+model UserVisit {
+  id        Int      @id @default(autoincrement())
+  ipAddress String
+  visitDate String   // Format: YYYY-MM-DD for simple day-by-day grouping
+  createdAt DateTime @default(now())
+
+  @@unique([ipAddress, visitDate])
+}
+
+// Track user website feedback (likes/dislikes)
+model Feedback {
+  id        Int      @id @default(autoincrement())
+  isLike    Boolean  // true for Like, false for Dislike
+  ipAddress String   @unique // Only one feedback entry allowed per unique IP
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Global site settings (e.g., Live Stream configuration)
+model SiteSetting {
+  id                 Int      @id @default(1)
+  liveStreamUrl      String?  // YouTube video ID or URL
+  liveStreamPlatform String   @default("youtube") // youtube, facebook, twitch, instagram
+  isLiveActive       Boolean  @default(false)
+  updatedAt          DateTime @updatedAt
+}

@@ -59,8 +59,9 @@ app.get('/api/stats', async (req, res) => {
 // ── GET /api/announcements ───────────────────────────────────────────
 app.get('/api/announcements', async (req, res) => {
   try {
+    const fetchAll = req.query.all === 'true';
     const announcements = await prisma.announcement.findMany({
-      where: { isActive: true },
+      where: fetchAll ? {} : { isActive: true },
       orderBy: { createdAt: 'desc' },
     });
     res.json(announcements);
@@ -200,6 +201,196 @@ app.patch('/api/announcements/:id', async (req, res) => {
   } catch (error) {
     console.error('Error updating announcement:', error);
     res.status(500).json({ error: 'Failed to update announcement' });
+  }
+});
+
+// ── POST /api/announcements ───────────────────────────────────────────
+app.post('/api/announcements', async (req, res) => {
+  try {
+    const { title, body, isActive } = req.body;
+    if (!title || !body) {
+      return res.status(400).json({ error: 'Title and body are required' });
+    }
+    const announcement = await prisma.announcement.create({
+      data: {
+        title,
+        body,
+        isActive: isActive !== undefined ? isActive : true,
+      },
+    });
+    res.json(announcement);
+  } catch (error) {
+    console.error('Error creating announcement:', error);
+    res.status(500).json({ error: 'Failed to create announcement' });
+  }
+});
+
+// ── PUT /api/announcements/:id ────────────────────────────────────────
+app.put('/api/announcements/:id', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const { title, body } = req.body;
+    if (isNaN(id) || !title || !body) {
+      return res.status(400).json({ error: 'Invalid input data' });
+    }
+    const announcement = await prisma.announcement.update({
+      where: { id },
+      data: { title, body },
+    });
+    res.json(announcement);
+  } catch (error) {
+    console.error('Error updating announcement:', error);
+    res.status(500).json({ error: 'Failed to update announcement' });
+  }
+});
+
+// ── DELETE /api/announcements/:id ─────────────────────────────────────
+app.delete('/api/announcements/:id', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) {
+      return res.status(400).json({ error: 'Invalid announcement ID' });
+    }
+    await prisma.announcement.delete({
+      where: { id },
+    });
+    res.json({ success: true, message: 'Announcement deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting announcement:', error);
+    res.status(500).json({ error: 'Failed to delete announcement' });
+  }
+});
+
+// ── POST /api/visits ──────────────────────────────────────────────────
+app.post('/api/visits', async (req, res) => {
+  try {
+    const ipAddress = req.body.ipAddress || req.ip || '127.0.0.1';
+    
+    // Get current local date in YYYY-MM-DD format
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    const visitDate = `${yyyy}-${mm}-${dd}`;
+
+    try {
+      await prisma.userVisit.create({
+        data: {
+          ipAddress,
+          visitDate,
+        },
+      });
+      return res.json({ success: true, isNewToday: true });
+    } catch (dbError) {
+      // Catch unique constraint
+      return res.json({ success: true, isNewToday: false });
+    }
+  } catch (error) {
+    console.error('Error recording visit:', error);
+    res.status(500).json({ error: 'Failed to record visit' });
+  }
+});
+
+// ── POST /api/feedback ────────────────────────────────────────────────
+app.post('/api/feedback', async (req, res) => {
+  try {
+    const { isLike, ipAddress } = req.body;
+    const ip = ipAddress || req.ip || '127.0.0.1';
+    
+    const feedback = await prisma.feedback.upsert({
+      where: { ipAddress: ip },
+      update: { isLike },
+      create: { ipAddress: ip, isLike },
+    });
+    res.json({ success: true, feedback });
+  } catch (error) {
+    console.error('Error submitting feedback:', error);
+    res.status(500).json({ error: 'Failed to submit feedback' });
+  }
+});
+
+// ── GET /api/feedback/status ──────────────────────────────────────────
+app.get('/api/feedback/status', async (req, res) => {
+  try {
+    const ip = req.query.ipAddress as string || req.ip || '127.0.0.1';
+    const feedback = await prisma.feedback.findUnique({
+      where: { ipAddress: ip }
+    });
+    res.json({ success: true, hasVoted: !!feedback, isLike: feedback?.isLike ?? null });
+  } catch (error) {
+    console.error('Error fetching feedback status:', error);
+    res.status(500).json({ error: 'Failed to fetch status' });
+  }
+});
+
+// ── GET /api/analytics ────────────────────────────────────────────────
+app.get('/api/analytics', async (req, res) => {
+  try {
+    const uniqueVisitorsResult = await prisma.userVisit.findMany({
+      select: { ipAddress: true },
+      distinct: ['ipAddress']
+    });
+    const totalUniqueVisitors = uniqueVisitorsResult.length;
+
+    const likes = await prisma.feedback.count({ where: { isLike: true } });
+    const dislikes = await prisma.feedback.count({ where: { isLike: false } });
+
+    const rawDau = await prisma.userVisit.groupBy({
+      by: ['visitDate'],
+      _count: { ipAddress: true },
+      orderBy: { visitDate: 'desc' },
+      take: 7,
+    });
+
+    const dauList = rawDau.map((row) => ({
+      date: row.visitDate,
+      count: row._count.ipAddress,
+    }));
+
+    res.json({
+      success: true,
+      totalUniqueVisitors,
+      likes,
+      dislikes,
+      dauList,
+    });
+  } catch (error) {
+    console.error('Error in getAnalytics:', error);
+    res.status(500).json({ error: 'Failed to fetch analytics' });
+  }
+});
+
+// ── GET /api/live-stream ──────────────────────────────────────────────
+app.get('/api/live-stream', async (req, res) => {
+  try {
+    const settings = await prisma.siteSetting.findUnique({
+      where: { id: 1 }
+    });
+    res.json({ 
+      success: true, 
+      liveStreamUrl: settings?.liveStreamUrl || "", 
+      liveStreamPlatform: settings?.liveStreamPlatform || "youtube",
+      isLiveActive: settings?.isLiveActive || false 
+    });
+  } catch (error) {
+    console.error('Error fetching live stream:', error);
+    res.status(500).json({ error: 'Failed to fetch live stream' });
+  }
+});
+
+// ── PUT /api/live-stream ──────────────────────────────────────────────
+app.put('/api/live-stream', async (req, res) => {
+  try {
+    const { url, platform, isActive } = req.body;
+    const settings = await prisma.siteSetting.upsert({
+      where: { id: 1 },
+      update: { liveStreamUrl: url, liveStreamPlatform: platform, isLiveActive: isActive },
+      create: { id: 1, liveStreamUrl: url, liveStreamPlatform: platform, isLiveActive: isActive },
+    });
+    res.json({ success: true, settings });
+  } catch (error) {
+    console.error('Error updating live stream:', error);
+    res.status(500).json({ error: 'Failed to update live stream' });
   }
 });
 
