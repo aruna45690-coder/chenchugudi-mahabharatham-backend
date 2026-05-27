@@ -445,11 +445,15 @@ app.post('/api/seed', async (req, res) => {
 });
 
 // Configure Web Push
-webpush.setVapidDetails(
-  'mailto:admin@chenchugudi.com',
-  process.env.VAPID_PUBLIC_KEY || '',
-  process.env.VAPID_PRIVATE_KEY || ''
-);
+if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
+  webpush.setVapidDetails(
+    'mailto:your-email@example.com',
+    process.env.VAPID_PUBLIC_KEY,
+    process.env.VAPID_PRIVATE_KEY
+  );
+} else {
+  console.warn("VAPID keys not found. Push notifications will be disabled.");
+}
 
 // ── POST /api/notifications/subscribe ─────────────────────────────────
 app.post('/api/notifications/subscribe', async (req, res) => {
