@@ -1,5 +1,6 @@
 {
   "version": 2,
+  "buildCommand": "npm run build && npx prisma migrate deploy",
   "builds": [
     {
       "src": "src/index.ts",
