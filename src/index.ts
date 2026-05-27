@@ -4,6 +4,7 @@ import { PrismaClient } from '@prisma/client';
 import multer from 'multer';
 import { v2 as cloudinary, UploadApiResponse } from 'cloudinary';
 import { Readable } from 'stream';
+import { execSync } from 'child_process';
 import dotenv from 'dotenv';
 import webpush from 'web-push';
 
@@ -600,6 +601,28 @@ app.post('/api/admin/seed', async (req, res) => {
   } catch (error: any) {
     console.error('Seed error:', error);
     res.status(500).json({ error: error.message });
+  }
+});
+
+// ── POST /api/admin/migrate ─────────────────────────────────────────
+// ONE-TIME endpoint to run prisma migrate deploy on production DB.
+app.post('/api/admin/migrate', async (req, res) => {
+  const { secret } = req.body;
+  if (secret !== 'seed-chenchugudi-2026') {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  try {
+    console.log('🔧 Running prisma migrate deploy...');
+    const output = execSync('npx prisma migrate deploy', {
+      env: { ...process.env },
+      encoding: 'utf8',
+      timeout: 60000,
+    });
+    console.log('✅ Migration output:', output);
+    res.json({ success: true, message: '✅ Migrations deployed!', output });
+  } catch (error: any) {
+    console.error('Migration error:', error.message);
+    res.status(500).json({ error: error.message, stderr: error.stderr });
   }
 });
 
