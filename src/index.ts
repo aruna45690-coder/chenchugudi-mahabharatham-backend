@@ -91,15 +91,20 @@ app.get('/api/gallery', async (req, res) => {
 app.post('/api/gallery', upload.single('image'), async (req, res) => {
   try {
     const title = req.body.title || 'Chenchugudi Mahabharatham';
+    const titleTe = req.body.titleTe || null;
     const uploadedBy = req.body.uploadedBy || 'Admin';
     const eventName = req.body.eventName || null;
+    const eventNameTe = req.body.eventNameTe || null;
     
     let eventDate = new Date();
     if (req.body.eventDate) {
       eventDate = new Date(req.body.eventDate);
     }
 
-    if (!req.file) {
+    const mediaTypeInput = req.body.mediaType || 'IMAGE';
+    const videoUrl = req.body.videoUrl || null;
+
+    if (!req.file && mediaTypeInput !== 'YOUTUBE') {
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
@@ -124,18 +129,32 @@ app.post('/api/gallery', upload.single('image'), async (req, res) => {
       });
     };
 
-    const cloudinaryResult = await uploadToCloudinary(req.file.buffer);
+    let imageUrl = '';
+    let publicId = null;
+    let finalMediaType = mediaTypeInput;
+
+    if (req.file) {
+      const cloudinaryResult = await uploadToCloudinary(req.file.buffer);
+      imageUrl = cloudinaryResult.secure_url;
+      publicId = cloudinaryResult.public_id;
+      finalMediaType = cloudinaryResult.resource_type || 'IMAGE';
+    } else if (mediaTypeInput === 'YOUTUBE') {
+      imageUrl = ''; // We will use youtube thumbnail logic in frontend
+    }
 
     // Save to PostgreSQL DB via Prisma
     const galleryImage = await prisma.galleryImage.create({
       data: {
         title,
-        imageUrl: cloudinaryResult.secure_url,
-        publicId: cloudinaryResult.public_id,
+        titleTe,
+        imageUrl,
+        publicId,
         uploadedBy,
-        mediaType: cloudinaryResult.resource_type || 'image',
+        mediaType: finalMediaType,
+        videoUrl,
         eventDate,
         eventName,
+        eventNameTe,
       },
     });
 
@@ -207,14 +226,16 @@ app.patch('/api/announcements/:id', async (req, res) => {
 // ── POST /api/announcements ───────────────────────────────────────────
 app.post('/api/announcements', async (req, res) => {
   try {
-    const { title, body, isActive } = req.body;
+    const { title, titleTe, body, bodyTe, isActive } = req.body;
     if (!title || !body) {
       return res.status(400).json({ error: 'Title and body are required' });
     }
     const announcement = await prisma.announcement.create({
       data: {
         title,
+        titleTe,
         body,
+        bodyTe,
         isActive: isActive !== undefined ? isActive : true,
       },
     });
@@ -229,13 +250,13 @@ app.post('/api/announcements', async (req, res) => {
 app.put('/api/announcements/:id', async (req, res) => {
   try {
     const id = parseInt(req.params.id);
-    const { title, body } = req.body;
+    const { title, titleTe, body, bodyTe } = req.body;
     if (isNaN(id) || !title || !body) {
       return res.status(400).json({ error: 'Invalid input data' });
     }
     const announcement = await prisma.announcement.update({
       where: { id },
-      data: { title, body },
+      data: { title, titleTe, body, bodyTe },
     });
     res.json(announcement);
   } catch (error) {
@@ -394,55 +415,7 @@ app.put('/api/live-stream', async (req, res) => {
   }
 });
 
-// ── GET /api/seed ─────────────────────────────────────────────────────
-app.get('/api/seed', async (req, res) => {
-  try {
-    // Clear existing data
-    await prisma.announcement.deleteMany();
-    await prisma.galleryImage.deleteMany();
 
-    // Seed default Announcements (Real/Informational)
-    await prisma.announcement.createMany({
-      data: [
-        {
-          title: "Welcome to Chenchugudi Mahabharatham!",
-          body: "The official platform for our annual festival is now live. Stay tuned for dates and schedules.",
-          isActive: true,
-        },
-      ],
-    });
-
-    res.json({ success: true, message: 'Database cleared and clean default state seeded successfully' });
-  } catch (error) {
-    console.error('Error seeding database:', error);
-    res.status(500).json({ error: 'Failed to seed database', details: String(error) });
-  }
-});
-
-// Also support POST /api/seed for flexibility
-app.post('/api/seed', async (req, res) => {
-  try {
-    // Clear existing data
-    await prisma.announcement.deleteMany();
-    await prisma.galleryImage.deleteMany();
-
-    // Seed default Announcements (Real/Informational)
-    await prisma.announcement.createMany({
-      data: [
-        {
-          title: "Welcome to Chenchugudi Mahabharatham!",
-          body: "The official platform for our annual festival is now live. Stay tuned for dates and schedules.",
-          isActive: true,
-        },
-      ],
-    });
-
-    res.json({ success: true, message: 'Database cleared and clean default state seeded successfully' });
-  } catch (error) {
-    console.error('Error seeding database:', error);
-    res.status(500).json({ error: 'Failed to seed database', details: String(error) });
-  }
-});
 
 // Configure Web Push
 if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {

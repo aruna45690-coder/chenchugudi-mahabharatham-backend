@@ -14,6 +14,7 @@ datasource db {
 model GalleryImage {
   id          Int      @id @default(autoincrement())
   title       String
+  titleTe     String?  // Telugu title
   imageUrl    String   // stores Cloudinary URL (image or video thumbnail)
   mediaType   String   @default("IMAGE") // IMAGE, VIDEO, YOUTUBE
   videoUrl    String?  // Original video URL or YouTube URL
@@ -21,6 +22,7 @@ model GalleryImage {
   uploadedBy  String
   eventDate   DateTime @default(now())
   eventName   String?
+  eventNameTe String?  // Telugu event name
   createdAt   DateTime @default(now())
 }
 
@@ -28,7 +30,9 @@ model GalleryImage {
 model Announcement {
   id        Int      @id @default(autoincrement())
   title     String
+  titleTe   String?  // Telugu title
   body      String
+  bodyTe    String?  // Telugu body
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
 }
