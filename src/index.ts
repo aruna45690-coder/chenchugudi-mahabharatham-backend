@@ -51,7 +51,7 @@ app.get('/api/festival/active', async (req, res) => {
           orderBy: { id: 'asc' },
         },
         sponsors: {
-          orderBy: { date: 'asc' },
+          orderBy: { id: 'asc' },
         },
       },
     });
