@@ -613,10 +613,11 @@ app.post('/api/admin/migrate', async (req, res) => {
   }
   try {
     console.log('🔧 Running prisma migrate deploy...');
-    const output = execSync('npx prisma migrate deploy', {
+    const output = execSync('./node_modules/.bin/prisma migrate deploy', {
       env: { ...process.env },
       encoding: 'utf8',
       timeout: 60000,
+      cwd: process.cwd(),
     });
     console.log('✅ Migration output:', output);
     res.json({ success: true, message: '✅ Migrations deployed!', output });
