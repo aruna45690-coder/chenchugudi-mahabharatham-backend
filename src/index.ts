@@ -126,6 +126,26 @@ app.get('/api/gallery', async (req, res) => {
   }
 });
 
+// ── GET /api/cloudinary-sign ─────────────────────────────────────────
+app.get('/api/cloudinary-sign', (req, res) => {
+  try {
+    const timestamp = Math.round(new Date().getTime() / 1000);
+    const signature = cloudinary.utils.api_sign_request(
+      { timestamp, folder: 'chenchugudi-gallery' },
+      process.env.CLOUDINARY_API_SECRET!
+    );
+    res.json({
+      timestamp,
+      signature,
+      apiKey: process.env.CLOUDINARY_API_KEY,
+      cloudName: process.env.CLOUDINARY_CLOUD_NAME,
+    });
+  } catch (error) {
+    console.error('Error generating Cloudinary signature:', error);
+    res.status(500).json({ error: 'Failed to generate signature' });
+  }
+});
+
 // ── POST /api/gallery ────────────────────────────────────────────────
 app.post('/api/gallery', upload.single('image'), async (req, res) => {
   try {
@@ -142,12 +162,15 @@ app.post('/api/gallery', upload.single('image'), async (req, res) => {
 
     const mediaTypeInput = req.body.mediaType || 'IMAGE';
     const videoUrl = req.body.videoUrl || null;
+    let imageUrl = req.body.imageUrl || '';
+    let publicId = req.body.publicId || null;
+    let finalMediaType = req.body.finalMediaType || mediaTypeInput;
 
-    if (!req.file && mediaTypeInput !== 'YOUTUBE') {
-      return res.status(400).json({ error: 'No file uploaded' });
+    if (!req.file && !imageUrl && mediaTypeInput !== 'YOUTUBE') {
+      return res.status(400).json({ error: 'No file or imageUrl uploaded' });
     }
 
-    // Helper to upload buffer to Cloudinary using stream
+    // Helper to upload buffer to Cloudinary using stream (fallback for small files)
     const uploadToCloudinary = (fileBuffer: Buffer): Promise<UploadApiResponse> => {
       return new Promise((resolve, reject) => {
         const stream = cloudinary.uploader.upload_stream(
@@ -168,16 +191,12 @@ app.post('/api/gallery', upload.single('image'), async (req, res) => {
       });
     };
 
-    let imageUrl = '';
-    let publicId = null;
-    let finalMediaType = mediaTypeInput;
-
     if (req.file) {
       const cloudinaryResult = await uploadToCloudinary(req.file.buffer);
       imageUrl = cloudinaryResult.secure_url;
       publicId = cloudinaryResult.public_id;
       finalMediaType = cloudinaryResult.resource_type || 'IMAGE';
-    } else if (mediaTypeInput === 'YOUTUBE') {
+    } else if (mediaTypeInput === 'YOUTUBE' && !imageUrl) {
       imageUrl = ''; // We will use youtube thumbnail logic in frontend
     }
 
