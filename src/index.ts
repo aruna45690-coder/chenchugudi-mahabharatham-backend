@@ -115,8 +115,9 @@ app.get('/api/gallery', async (req, res) => {
   try {
     const images = await prisma.galleryImage.findMany({
       orderBy: [
-        { eventDate: 'asc' },
-        { createdAt: 'asc' }
+        { isFeatured: 'desc' },
+        { eventDate: 'desc' },
+        { createdAt: 'desc' }
       ],
     });
     res.json(images);
@@ -220,6 +221,24 @@ app.post('/api/gallery', upload.single('image'), async (req, res) => {
   } catch (error) {
     console.error('Error uploading image/video to Cloudinary/DB:', error);
     res.status(500).json({ error: 'Failed to upload image/video', details: String(error) });
+  }
+});
+
+// ── PATCH /api/gallery/:id/feature ──────────────────────────────────────
+app.patch('/api/gallery/:id/feature', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ error: 'Invalid gallery image ID' });
+    const { isFeatured } = req.body;
+    
+    const image = await prisma.galleryImage.update({
+      where: { id },
+      data: { isFeatured: Boolean(isFeatured) },
+    });
+    res.json(image);
+  } catch (error) {
+    console.error('Error updating feature status:', error);
+    res.status(500).json({ error: 'Failed to update feature status', details: String(error) });
   }
 });
 

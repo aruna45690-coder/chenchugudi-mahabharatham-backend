@@ -23,6 +23,7 @@ model GalleryImage {
   eventDate   DateTime @default(now())
   eventName   String?
   eventNameTe String?  // Telugu event name
+  isFeatured  Boolean  @default(false)
   createdAt   DateTime @default(now())
 }
 
