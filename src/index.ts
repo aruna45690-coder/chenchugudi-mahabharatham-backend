@@ -113,17 +113,81 @@ app.get('/api/announcements', async (req, res) => {
 // ── GET /api/gallery ─────────────────────────────────────────────────
 app.get('/api/gallery', async (req, res) => {
   try {
-    const images = await prisma.galleryImage.findMany({
-      orderBy: [
-        { isFeatured: 'desc' },
-        { eventDate: 'desc' },
-        { createdAt: 'desc' }
-      ],
+    const images = await prisma.galleryImage.findMany();
+    
+    // Fetch context (metadata) from Cloudinary to get sortOrder
+    let cloudinaryResources: any[] = [];
+    try {
+      const result = await cloudinary.api.resources({
+        type: 'upload',
+        prefix: 'chenchugudi-gallery/',
+        context: true,
+        max_results: 500
+      });
+      cloudinaryResources = result.resources || [];
+    } catch (cErr) {
+      console.error('Failed to fetch Cloudinary resources:', cErr);
+    }
+
+    // Create a map of publicId -> sortOrder
+    const sortOrderMap = new Map<string, number>();
+    cloudinaryResources.forEach(res => {
+      if (res.public_id && res.context && res.context.custom && res.context.custom.sortOrder) {
+        sortOrderMap.set(res.public_id, parseInt(res.context.custom.sortOrder, 10));
+      }
     });
-    res.json(images);
+
+    // Attach sortOrder to images
+    const imagesWithOrder = images.map(img => {
+      let order = img.publicId ? sortOrderMap.get(img.publicId) : undefined;
+      return {
+        ...img,
+        sortOrder: order !== undefined && !isNaN(order) ? order : 999999 // Default to high number so unsorted go to bottom
+      };
+    });
+
+    // Sort by Cloudinary sortOrder first, then fallback to eventDate/createdAt
+    imagesWithOrder.sort((a, b) => {
+      if (a.sortOrder !== b.sortOrder) {
+        return a.sortOrder - b.sortOrder;
+      }
+      if (a.isFeatured !== b.isFeatured) {
+        return a.isFeatured ? -1 : 1;
+      }
+      const timeA = new Date(a.eventDate).getTime();
+      const timeB = new Date(b.eventDate).getTime();
+      if (timeA !== timeB) return timeB - timeA;
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
+
+    res.json(imagesWithOrder);
   } catch (error) {
     console.error('Error fetching gallery images:', error);
     res.status(500).json({ error: 'Failed to fetch gallery images' });
+  }
+});
+
+// ── PATCH /api/gallery/reorder ───────────────────────────────────────
+app.patch('/api/gallery/reorder', async (req, res) => {
+  try {
+    const { items } = req.body; // Array of { publicId, sortOrder }
+    if (!Array.isArray(items)) {
+      return res.status(400).json({ error: 'Items must be an array' });
+    }
+
+    const updatePromises = items.map(async (item: { publicId: string; sortOrder: number }) => {
+      if (item.publicId) {
+        // Update context in Cloudinary
+        await cloudinary.uploader.add_context(`sortOrder=${item.sortOrder}`, [item.publicId]);
+      }
+    });
+
+    await Promise.all(updatePromises);
+
+    res.json({ success: true, message: 'Sort order updated in Cloudinary' });
+  } catch (error) {
+    console.error('Error updating gallery sort order in Cloudinary:', error);
+    res.status(500).json({ error: 'Failed to update sort order', details: String(error) });
   }
 });
 
