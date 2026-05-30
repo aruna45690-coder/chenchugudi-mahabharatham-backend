@@ -7,6 +7,7 @@ import { Readable } from 'stream';
 import { execSync } from 'child_process';
 import dotenv from 'dotenv';
 import webpush from 'web-push';
+import cron from 'node-cron';
 
 dotenv.config();
 
@@ -645,6 +646,89 @@ app.post('/api/notifications/send', async (req, res) => {
     console.error('Error sending push notifications:', error);
     res.status(500).json({ error: 'Internal Server Error' });
   }
+});
+
+// ── CRON JOB: Send Daily Digest Push at 6:00 AM IST ───────────────────
+cron.schedule('0 6 * * *', async () => {
+  try {
+    console.log('⏰ Running 6:00 AM IST Push Notification Cron Job...');
+    
+    // Check if there are active events or donors for today
+    const activeYear = await prisma.festivalYear.findFirst({
+      where: { isActive: true },
+      include: { events: true, sponsors: true },
+    });
+
+    if (!activeYear) return;
+
+    // Use India Time (IST)
+    const istNow = new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Kolkata"}));
+    
+    const isToday = (d: Date) => {
+      return d.getDate() === istNow.getDate() &&
+        d.getMonth() === istNow.getMonth() &&
+        d.getFullYear() === istNow.getFullYear();
+    };
+    
+    const parseDateStr = (dStr: string) => {
+      const parts = dStr.split('-');
+      if (parts.length === 3) {
+        return new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0]));
+      }
+      return new Date(0);
+    };
+
+    const todaysMainEvent = activeYear.events.find((item: any) => isToday(parseDateStr(item.date)));
+    const todaysSponsors = activeYear.sponsors.filter((s: any) => isToday(parseDateStr(s.date)));
+
+    // Only send notification if there is something happening today
+    const hasEvents = todaysMainEvent || todaysSponsors.length > 0;
+    
+    const isFestivalDay = (istNow.getFullYear() === 2026 && istNow.getMonth() === 4 && istNow.getDate() >= 29) || 
+                          (istNow.getFullYear() === 2026 && istNow.getMonth() === 5 && istNow.getDate() <= 7);
+
+    if (hasEvents || isFestivalDay) {
+      const title = "Today's Festival Digest is Ready! 🕉️";
+      let message = "";
+      if (todaysMainEvent) {
+        message += `Today's Event: ${todaysMainEvent.eventEn} | `;
+      }
+      message += "Tap to view today's complete schedule and donors.";
+
+      const subscriptions = await prisma.pushSubscription.findMany();
+      if (subscriptions.length === 0) return;
+
+      const payload = JSON.stringify({
+        title,
+        body: message,
+        url: 'https://chenchugudi-mahabharatham.vercel.app',
+        icon: '/icon-192x192.png'
+      });
+
+      console.log(`Sending push to ${subscriptions.length} subscribers...`);
+      
+      for (const sub of subscriptions) {
+        try {
+          await webpush.sendNotification({
+            endpoint: sub.endpoint,
+            keys: { p256dh: sub.p256dh, auth: sub.auth },
+          }, payload);
+        } catch (error: any) {
+          if (error.statusCode === 410 || error.statusCode === 404) {
+            await prisma.pushSubscription.delete({ where: { id: sub.id } });
+          }
+        }
+      }
+      console.log('✅ Cron Job completed successfully.');
+    } else {
+      console.log('No events for today, skipping push notification.');
+    }
+  } catch (error) {
+    console.error('Error in cron job:', error);
+  }
+}, {
+  scheduled: true,
+  timezone: "Asia/Kolkata"
 });
 
 // ── POST /api/admin/seed ─────────────────────────────────────────────
